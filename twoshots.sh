@@ -6,6 +6,7 @@ function usage()
 	echo -e "-t <time>      \tScan timeout in seconds"
 	echo -e "-i <interface> \tInterface name"
 	echo -e "-a             \tAttack all targets"
+	echo -e "-n             \tAttack only new targets"
 	echo -e "-h             \tShow this help"
 	exit
 }
@@ -13,7 +14,7 @@ function usage()
 TIMEOUT=30
 IFACE="wlan0"
 
-while getopts "t:i:ha" opt
+while getopts "t:i:han" opt
 do
 	case $opt in
 		t)
@@ -22,6 +23,8 @@ do
 			IFACE=${OPTARG};;
 		a)
 			ALL="1";;
+		n)
+			NEW="1";;
 		h)
 			usage;;
 		*)
@@ -36,6 +39,27 @@ awk -v iface="$IFACE)" '$3 == iface {MAC = $2;wifi[MAC]["BSSID"] = MAC};\
                         $1 == "SSID:" {wifi[MAC]["SSID"] = $2};\
                         $1 == "WPS:" {printf "%s\t%s\n",wifi[MAC]["BSSID"],wifi[MAC]["SSID"]}'|\
 sed --expression='s/(on//g')
+
+if [ -d reports ]
+then
+	OLD=$(cat reports/stored.txt |\
+		awk '$1 == "BSSID:" {MAC = $2; wifi[MAC]["BSSID"] = MAC};\
+		$1 == "ESSID:" {wifi[MAC]["SSID"] = $2;\
+		printf "%s\t%s\n",wifi[MAC]["BSSID"],wifi[MAC]["SSID"]}' | sort | uniq -i)
+fi
+
+if [ $NEW ]
+then
+	for BSSID in $(echo "$OLD" | awk '{print $1}')
+	do
+		OLD_BSSIDS+=($BSSID)
+	done
+
+	for ESSID in $(echo "$OLD" | awk '{print $1}')
+	do
+		OLD_ESSIDS+=($ESSID)
+	done
+fi
 
 if [ "$TARGETS" ]
 then
