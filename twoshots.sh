@@ -13,7 +13,6 @@ function usage()
 }
 
 #Setting default values
-TIMEOUT=30
 IFACE="wlan0"
 
 #Parsing script arguments
@@ -103,11 +102,17 @@ then
 fi
 
 #Hail Mary
-if [ $CHOSEN = "all" ] || [ $ALL ]
+if [ "$CHOSEN" = "all" ] || [ $ALL ]
 then
 	echo "[*] Attacking all targets!"
 	CHOSEN=${!BSSIDS[@]}
 	ALL="1"
+fi
+
+if [ ! $TIMEOUT ]
+then
+	echo -n "[*] Set timeout for each target (0 - no timeout): "
+	read TIMEOUT
 fi
 
 #Main loop
