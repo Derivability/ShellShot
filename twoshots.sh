@@ -62,9 +62,9 @@ then
 		#Getting stored networks info
 		OLD=$(awk -f stored.awk reports/stored.txt |\
 			sort | uniq -i)
-		
 		OLD_BSSIDS=($(fillArr "$(echo "$OLD" | awk '{print $1}')"))
 		OLD_ESSIDS=($(fillArr "$(echo "$OLD" | awk '{print $2}')"))
+		OLD_SIGNAL=($(fillArr "$(echo "$OLD" | awk '{print $3}')"))
 	else
 		echo "[-] No saved networks found!"
 	fi
@@ -95,7 +95,23 @@ do
 
 	#Filling SIGNALS array with signal level
 	SIGNALS=($(fillArr "$(echo "$TARGETS" | awk '{print $3}')"))
-
+	
+	#Skipping already stored networks
+	if [ $NEW ]
+	then
+		for BSSID in ${!BSSIDS[@]}
+		do
+			for OLD_BSSID in ${!OLD_BSSIDS[@]}
+			do
+				if [ " ${BSSIDS[$BSSID]}" = " ${OLD_BSSIDS[$OLD_BSSID]}" ]
+				then
+					unset 'BSSIDS[$BSSID]'
+					REMOVED=$((REMOVED+1))
+				fi
+			done
+		done
+	fi
+	
 	#Displaying to user scan results
 	echo -e "[№]\tPower\tBSSID\t\t\tESSID"
 	for TARGET in ${!BSSIDS[@]}
@@ -106,6 +122,11 @@ do
 	#Prompting user for set of targets from scan result
 	if [ ! $ALL ]
 	then
+		if [ $NEW ] && [ $REMOVED ]
+		then
+			echo "[!] Viewing only not hacked networks"
+			echo "[!] Removed $REMOVED entries"
+		fi
 		echo -n "[*] Choose targets to attack (space separated) or 'all'. Type 'r' to rescan networks: "
 		read CHOSEN
 	fi
@@ -118,6 +139,11 @@ do
 	#Hail Mary
 	if [ "$CHOSEN" = "all" ] || [ $ALL ]
 	then
+		if [ $NEW ] && [ $REMOVED ]
+		then
+			echo "[!] Viewing only not hacked networks"
+			echo "[!] Removed $REMOVED entries"
+		fi
 		echo "[*] Attacking all targets!"
 		CHOSEN=${!BSSIDS[@]}
 		ALL="1"
