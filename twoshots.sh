@@ -8,7 +8,14 @@ function usage()
 	echo -e "-i <interface> \tInterface name"
 	echo -e "-a             \tAttack all targets"
 	echo -e "-n             \tAttack only new targets"
+	echo -e "-S             \tShow stored networks"
 	echo -e "-h             \tShow this help"
+	exit
+}
+
+function showStored()
+{
+	awk -f stored.awk reports/stored.txt | sort | uniq -i
 	exit
 }
 
@@ -36,7 +43,7 @@ function scanNetworks()
 IFACE="wlan0"
 
 #Parsing script arguments
-while getopts "t:i:han" opt
+while getopts "t:i:hanS" opt
 do
 	case $opt in
 		t)
@@ -47,6 +54,8 @@ do
 			ALL="1";;
 		n)
 			NEW="1";;
+		S)
+			showStored;;
 		h)
 			usage;;
 		*)
