@@ -73,6 +73,7 @@ fi
 #Preparation loop
 while true
 do
+	clear
 	echo "[*] Scanning networks around..."
 	#Getting list of targets
 	TARGETS=$(scanNetworks)
@@ -96,9 +97,10 @@ do
 	SIGNALS=($(fillArr "$(echo "$TARGETS" | awk '{print $3}')"))
 
 	#Displaying to user scan results
+	echo -e "[№]\tPower\tBSSID\t\t\tESSID"
 	for TARGET in ${!BSSIDS[@]}
 	do
-		echo -e "[$((${TARGET}+1))] ${SIGNALS[$TARGET]} db\t${BSSIDS[$TARGET]}\t${ESSIDS[$TARGET]}"
+		echo -e "[$((${TARGET}+1))]\t${SIGNALS[$TARGET]} db\t${BSSIDS[$TARGET]}\t${ESSIDS[$TARGET]}"
 	done
 
 	#Prompting user for set of targets from scan result
@@ -110,7 +112,6 @@ do
 
 	if [ "$CHOSEN" = "r" ]
 	then
-		clear
 		continue
 	fi
 
@@ -144,7 +145,7 @@ do
 		TARGET=$(($TARGET-1))
 	fi
 
-	#Calling oneshot with terget bssid
+	#Calling oneshot with target bssid
 	echo
 	echo "[+] Shooting ${BSSIDS[$TARGET]} - ${ESSIDS[$TARGET]}"
 	python oneshot.py --bssid ${BSSIDS[$TARGET]} -K -F -i $IFACE -w 2>/dev/null || true && killall sleep 2> /dev/null &
