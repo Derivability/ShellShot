@@ -40,8 +40,10 @@ echo "[*] Scanning networks around..."
 TARGETS=$(iw dev $IFACE scan |\
 awk -v iface="$IFACE)" '$3 == iface {MAC = $2;wifi[MAC]["BSSID"] = MAC};\
                         $1 == "SSID:" {wifi[MAC]["SSID"] = $2};\
-                        $1 == "WPS:" {printf "%s\t%s\n",wifi[MAC]["BSSID"],wifi[MAC]["SSID"]}'|\
-sed --expression='s/(on//g')
+			$1 == "signal:" {wifi[MAC]["SIG"] = $2};\
+                        $1 == "WPS:" {printf "%s\t%s\t%s\n",wifi[MAC]["BSSID"],wifi[MAC]["SSID"],wifi[MAC]["SIG"]}'|\
+sed --expression='s/(on//g' |\
+sort -k 3)
 
 #Getting stored networks info
 if [ -d reports ]
@@ -88,10 +90,16 @@ do
 	ESSIDS+=($ESSID)
 done
 
+#Filling SIGNALS array with signal level
+for SIGNAL in $(echo "$TARGETS" | awk '{print $3}' | cut -f1 -d .)
+do
+	SIGNALS+=($SIGNAL)
+done
+
 #Displaying to user scan results
 for TARGET in ${!BSSIDS[@]}
 do
-	echo -e "[$((${TARGET}+1))] ${BSSIDS[$TARGET]}\t${ESSIDS[$TARGET]}"
+	echo -e "[$((${TARGET}+1))] ${SIGNALS[$TARGET]} db\t${BSSIDS[$TARGET]}\t${ESSIDS[$TARGET]}"
 done
 
 #Prompting user for set of targets from scan result
