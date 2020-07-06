@@ -12,6 +12,26 @@ function usage()
 	exit
 }
 
+function fillArr()
+{
+	INPUT="$1"
+
+	for ELEMENT in "$INPUT"
+	do
+		echo -n "$ELEMENT "
+	done
+}
+
+#Scanning networks and parsing output via awk scipt
+function scanNetworks()
+{
+	iw dev $IFACE scan |\
+	awk -v iface="$IFACE)" -f wifi.awk |\
+	sed --expression='s/(on//g' |\
+	sed --expression='s/.00//g' |\
+	sort -k 3
+}
+
 #Setting default values
 IFACE="wlan0"
 
@@ -34,93 +54,85 @@ do
 	esac
 done
 
-echo "[*] Scanning networks around..."
-
-#Scanning networks and parsing output via awk scipt
-TARGETS=$(iw dev $IFACE scan |\
-awk -v iface="$IFACE)" '$3 == iface {MAC = $2;wifi[MAC]["BSSID"] = MAC};\
-                        $1 == "SSID:" {wifi[MAC]["SSID"] = $2};\
-			$1 == "signal:" {wifi[MAC]["SIG"] = $2};\
-                        $1 == "WPS:" {printf "%s\t%s\t%s\n",wifi[MAC]["BSSID"],wifi[MAC]["SSID"],wifi[MAC]["SIG"]}'|\
-sed --expression='s/(on//g' |\
-sort -k 3)
-
-#Getting stored networks info
-if [ -d reports ]
-then
-	OLD=$(cat reports/stored.txt |\
-		awk '$1 == "BSSID:" {MAC = $2; wifi[MAC]["BSSID"] = MAC};\
-		$1 == "ESSID:" {wifi[MAC]["SSID"] = $2;\
-		printf "%s\t%s\n",wifi[MAC]["BSSID"],wifi[MAC]["SSID"]}' | sort | uniq -i)
-fi
-
 #Filling corresponding arrays with stored networks mac/name
 if [ $NEW ]
 then
-	for BSSID in $(echo "$OLD" | awk '{print $1}')
+	if [ -d reports ]
+	then
+		#Getting stored networks info
+		OLD=$(awk -f stored.awk reports/stored.txt |\
+			sort | uniq -i)
+		
+		OLD_BSSIDS=($(fillArr "$(echo "$OLD" | awk '{print $1}')"))
+		OLD_ESSIDS=($(fillArr "$(echo "$OLD" | awk '{print $2}')"))
+	else
+		echo "[-] No saved networks found!"
+	fi
+fi
+
+#Preparation loop
+while true
+do
+	echo "[*] Scanning networks around..."
+	#Getting list of targets
+	TARGETS=$(scanNetworks)
+
+	#Checking, if networks with WPS were found
+	if [ "$TARGETS" ]
+	then
+		echo "[+] Found targets:"
+	else
+		echo "[-] No targets found"
+		exit
+	fi
+
+	#Filling BSSIDS array with MAC addresses
+	BSSIDS=($(fillArr "$(echo "$TARGETS" | awk '{print $1}')"))
+
+	#Filling ESSIDS array with networks names
+	ESSIDS=($(fillArr "$(echo "$TARGETS" | awk '{print $2}')"))
+
+	#Filling SIGNALS array with signal level
+	SIGNALS=($(fillArr "$(echo "$TARGETS" | awk '{print $3}')"))
+
+	#Displaying to user scan results
+	for TARGET in ${!BSSIDS[@]}
 	do
-		OLD_BSSIDS+=($BSSID)
+		echo -e "[$((${TARGET}+1))] ${SIGNALS[$TARGET]} db\t${BSSIDS[$TARGET]}\t${ESSIDS[$TARGET]}"
 	done
 
-	for ESSID in $(echo "$OLD" | awk '{print $1}')
-	do
-		OLD_ESSIDS+=($ESSID)
-	done
-fi
+	#Prompting user for set of targets from scan result
+	if [ ! $ALL ]
+	then
+		echo -n "[*] Choose targets to attack (space separated) or 'all'. Type 'r' to rescan networks: "
+		read CHOSEN
+	fi
 
-#Checking, if networks with WPS were found
-if [ "$TARGETS" ]
-then
-	echo
-	echo "[+] Found targets:"
-else
-	echo "[-] No targets found"
-	exit
-fi
+	if [ "$CHOSEN" = "r" ]
+	then
+		clear
+		continue
+	fi
 
-#Filling BSSIDS array with MAC addresses
-for BSSID in $(echo "$TARGETS" | awk '{print $1}')
-do
-	BSSIDS+=($BSSID)
+	#Hail Mary
+	if [ "$CHOSEN" = "all" ] || [ $ALL ]
+	then
+		echo "[*] Attacking all targets!"
+		CHOSEN=${!BSSIDS[@]}
+		ALL="1"
+	fi
+
+	break
 done
-
-#Filling ESSIDS array with networks names
-for ESSID in $(echo "$TARGETS" | awk '{print $2}')
-do
-	ESSIDS+=($ESSID)
-done
-
-#Filling SIGNALS array with signal level
-for SIGNAL in $(echo "$TARGETS" | awk '{print $3}' | cut -f1 -d .)
-do
-	SIGNALS+=($SIGNAL)
-done
-
-#Displaying to user scan results
-for TARGET in ${!BSSIDS[@]}
-do
-	echo -e "[$((${TARGET}+1))] ${SIGNALS[$TARGET]} db\t${BSSIDS[$TARGET]}\t${ESSIDS[$TARGET]}"
-done
-
-#Prompting user for set of targets from scan result
-if [ ! $ALL ]
-then
-	echo -n "[*] Choose targets to attack (space separated) or 'all': "
-	read CHOSEN
-fi
-
-#Hail Mary
-if [ "$CHOSEN" = "all" ] || [ $ALL ]
-then
-	echo "[*] Attacking all targets!"
-	CHOSEN=${!BSSIDS[@]}
-	ALL="1"
-fi
 
 if [ ! $TIMEOUT ]
 then
-	echo -n "[*] Set timeout for each target (0 - no timeout): "
+	echo -n "[*] Set timeout for each target (0 - no timeout) [30]: "
 	read TIMEOUT
+	if [ ! $TIMEOUT ]
+	then
+		TIMEOUT=30
+	fi
 fi
 
 #Main loop
