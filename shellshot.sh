@@ -183,9 +183,14 @@ function parseStatus()
 }
 
 #Output formatting
-function printI() { echo "[*] $@"; }
-function printE() { echo "[-] $@"; }
-function printG() { echo "[+] $@"; }
+DEFAULT="\e[0m"
+BLUE="\e[34m"
+GREEN="\e[32m"
+RED="\e[31m"
+
+function printI() { echo -e "$BLUE[*]$DEFAULT $@"; }
+function printE() { echo -e "$RED[-]$DEFAULT $@"; }
+function printG() { echo -e "$GREEN[+]$DEFAULT $@"; }
 
 #Parse arguments
 while getopts "i:b:p:h" opt
