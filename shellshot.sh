@@ -212,6 +212,7 @@ function parseScanResults()
 	#Checking, if networks with WPS were found
 	if [ "$TARGETS" ]
 	then
+		printI "${RED}Red${DEFAULT} - WPS locked"
 		printG "Found targets:"
 	else
 		printE "No targets found"
@@ -226,15 +227,31 @@ function parseScanResults()
 
 	#Filling SIGNALS array with signal level
 	SIGNALS=($(fillArr "$(echo "$TARGETS" | awk '{print $3}')"))
+
+	#Filling LOCK array with lock status
+	LOCK=($(fillArr "$(echo "$TARGETS" | awk '{print $4}')"))
+}
+
+function printNetwork()
+{
+	echo -e "[$((${TARGET}+1))]\t${SIGNALS[$TARGET]} db\t${BSSIDS[$TARGET]}\t${ESSIDS[$TARGET]}"
 }
 
 function showScanResults()
 {
 	#Displaying to user scan results
+	#Table header
 	echo -e "$BLUE[№]$DEFAULT\tPower\tBSSID\t\t\tESSID"
+	#Printing arrays content line by line
 	for TARGET in ${!BSSIDS[@]}
 	do
-		echo -e "[$((${TARGET}+1))]\t${SIGNALS[$TARGET]} db\t${BSSIDS[$TARGET]}\t${ESSIDS[$TARGET]}"
+		if [ ${LOCK[$TARGET]} -eq 1 ]
+		then
+			#If WPS locked - output in red
+			echo -e "${RED}$(printNetwork)${DEFAULT}"
+		else
+			printNetwork
+		fi
 	done
 }
 
